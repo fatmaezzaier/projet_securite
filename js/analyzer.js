@@ -42,8 +42,9 @@
     return m ? m[1].toLowerCase() : "";
   }
 
-  function normalizeLeet(s) {
-    return s.replace(/0/g, "o").replace(/1/g, "l").replace(/3/g, "e").replace(/4/g, "a").replace(/5/g, "s").replace(/@/g, "a");
+  function leetVariants(s) {
+    const base = (s || "").replace(/0/g, "o").replace(/3/g, "e").replace(/4/g, "a").replace(/5/g, "s").replace(/@/g, "a");
+    return [base.replace(/1/g, "i"), base.replace(/1/g, "l")];
   }
 
   function isOfficial(host, domain) {
@@ -53,12 +54,17 @@
   // Détecte un domaine imitant une marque connue (sans jamais le visiter)
   function brandLookalike(host) {
     if (!host) return null;
-    const normalized = normalizeLeet(host);
+    const variants = leetVariants(host);
     for (const [brand, domain] of Object.entries(BRANDS)) {
       if (isOfficial(host, domain)) return null;
-      if (normalized.includes(brand)) return { brand, kind: "contient la marque" };
-      const label = host.split(".")[0];
-      if (levenshtein(normalizeLeet(label), brand) <= 2) return { brand, kind: "typosquatting" };
+      for (const norm of variants) {
+        if (norm.includes(brand)) {
+          const kind = host.toLowerCase().includes(brand) ? "contient la marque" : "typosquatting";
+          return { brand, kind };
+        }
+        const label = norm.split(".")[0];
+        if (levenshtein(label, brand) <= 2) return { brand, kind: "typosquatting" };
+      }
     }
     return null;
   }
@@ -88,12 +94,17 @@
     if (retDom && retDom !== fromDom) add("Expéditeur", "Return-Path différent de l'expéditeur", 5);
 
     const look = brandLookalike(fromDom);
-    if (look) add("Expéditeur", `Domaine expéditeur ${look.kind} "${look.brand}"`, 25);
+    if (look) {
+      const pts = look.kind === "typosquatting" ? 25 : 15;
+      add("Expéditeur", `Domaine expéditeur ${look.kind} "${look.brand}"`, pts);
+    }
 
     const nameLower = (s.name || "").toLowerCase();
     for (const [brand, domain] of Object.entries(BRANDS)) {
       if (nameLower.includes(brand) && !isOfficial(fromDom, domain)) {
-        add("Expéditeur", "Faux nom affiché : la marque ne correspond pas au domaine", 15);
+        if (!look || look.brand !== brand) {
+          add("Expéditeur", "Faux nom affiché : la marque ne correspond pas au domaine", 15);
+        }
         break;
       }
     }
@@ -104,16 +115,24 @@
       if (v === "fail" || v === "softfail") add("Expéditeur", `Authentification ${k.toUpperCase()} échouée`, k === "dmarc" ? 10 : 8);
       else if (v === "none" || v === "neutral") add("Expéditeur", `Authentification ${k.toUpperCase()} absente`, 3);
     });
+
+    return { look, fromDom };
   }
 
-  function checkUrls(email, add) {
+  function checkUrls(email, add, senderBrandLook, fromDom) {
+    const penalizedBrands = new Set(senderBrandLook ? [senderBrandLook.brand] : []);
     (email.urls || []).forEach(url => {
       const host = hostOf(url);
       if (!host) return;
       if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) add("URL", `Adresse IP utilisée comme domaine : ${host}`, 25);
       if (SHORTENERS.includes(host)) add("URL", `URL raccourcie : ${host}`, 15);
       const look = brandLookalike(host);
-      if (look) add("URL", `Domaine lookalike "${look.brand}" : ${host}`, 20);
+      if (look) {
+        if (host !== fromDom && !penalizedBrands.has(look.brand)) {
+          add("URL", `Domaine lookalike "${look.brand}" : ${host}`, 20);
+          penalizedBrands.add(look.brand);
+        }
+      }
       if (/^http:\/\//i.test(url)) add("URL", "Lien non chiffré (HTTP)", 10);
       if (host.split(".").length >= 5) add("URL", "Sous-domaines multiples", 8);
       if (url.includes("@")) add("URL", "Caractère @ dans l'URL", 15);
@@ -145,8 +164,8 @@
     const found = [];
     const add = (category, label, points) => found.push({ category, label, points });
     checkContent(email, add);
-    checkSender(email, add);
-    checkUrls(email, add);
+    const { look, fromDom } = checkSender(email, add);
+    checkUrls(email, add, look, fromDom);
     if (rawHtml) checkAnchors(rawHtml, add);
 
     const score = Math.min(100, found.reduce((sum, i) => sum + i.points, 0));
@@ -235,7 +254,8 @@
   }
 
   function mount() {
-    const view = document.getElementById("view-analyzer");
+    const view = typeof document !== "undefined" && typeof document.getElementById === "function"
+      ? document.getElementById("view-analyzer") : null;
     if (!view) return;
     const demos = window.PHISHDETECT_DATA.emails;
 
@@ -290,5 +310,9 @@
 
 window.PHISHDETECT = window.PHISHDETECT || {};
   window.PHISHDETECT.analyzer = { analyzeEmail, parseRaw, levelFor, levenshtein, saveToHistory };
-  document.addEventListener("DOMContentLoaded", mount);
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", mount);
+  } else {
+    mount();
+  }
 })();

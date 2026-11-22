@@ -63,6 +63,13 @@
 
     window.addEventListener("hashchange", () => showView(location.hash.replace("#", "")));
 
+    const themeInfoBtn = document.getElementById("themeInfoBtn");
+    if (themeInfoBtn) {
+        themeInfoBtn.addEventListener("click", () => {
+            alert("Console SOC PHISHDETECT : Système 100% opérationnel en environnement d'entraînement local isolé (aucun accès réseau externe).");
+        });
+    }
+
     if (window.lucide) lucide.createIcons();
     showView(location.hash.replace("#", "") || "dashboard");
 })();

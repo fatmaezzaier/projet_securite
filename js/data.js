@@ -46,7 +46,7 @@ window.PHISHDETECT_DATA = {
             attachments: ["nouveau_RIB.xlsm"],
             auth: { spf: "softfail", dkim: "fail", dmarc: "fail" },
             expected: "malicious",
-            indicators: ["Urgence", "Instruction financière inhabituelle", "Paiement suspect", "Pièce jointe inattendue", "Reply-To différent", "Demande de confidentialité"]
+            indicators: ["Urgence", "Instruction financière inhabituelle", "Paiement suspect", "Pièce jointe au format dangereux (.xlsm)", "Reply-To différent", "Demande de confidentialité"]
         },
         {
             id: "EM-005",

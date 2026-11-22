@@ -177,7 +177,7 @@
       event.preventDefault();
       const nav = document.querySelector('[data-view="analyzer"]');
       if (nav) nav.click();
-      else window.dispatchEvent(new CustomEvent("view:change", { detail: { view: "analyzer" } }));
+      else location.hash = "#analyzer";
       return;
     }
 
